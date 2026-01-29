@@ -53,9 +53,38 @@
             margin-right: 6px;
             font-size: 16px;
         }
-        .zhihu-dl-progress {
+        .zhihu-copy-button {
             position: fixed;
             bottom: 90px;
+            right: 30px;
+            z-index: 10000;
+            padding: 12px 16px;
+            background: #0084ff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .zhihu-copy-button:hover {
+            background: #0077e6;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+        }
+        .zhihu-copy-button:before {
+            content: "🔗";
+            margin-right: 6px;
+            font-size: 16px;
+        }
+        .zhihu-dl-progress {
+            position: fixed;
+            bottom: 150px;
             right: 30px;
             z-index: 10000;
             padding: 10px 16px;
@@ -616,6 +645,43 @@
         }
     };
 
+    // Copy link function
+    const copyArticleLink = async () => {
+        const url = window.location.href;
+
+        try {
+            await navigator.clipboard.writeText(url);
+
+            // Show success message
+            const copyButton = document.querySelector('.zhihu-copy-button');
+            const originalText = copyButton.textContent;
+            copyButton.textContent = '✅ 已复制';
+
+            setTimeout(() => {
+                copyButton.textContent = originalText;
+            }, 2000);
+
+            showProgress('链接已复制到剪贴板', 2000);
+        } catch (error) {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = url;
+            textArea.style.position = 'fixed';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+            textArea.select();
+
+            try {
+                document.execCommand('copy');
+                showProgress('链接已复制到剪贴板', 2000);
+            } catch (err) {
+                showProgress('复制失败，请手动复制链接', 3000);
+            }
+
+            document.body.removeChild(textArea);
+        }
+    };
+
     // Add download button
     const addDownloadButton = () => {
         // Remove any existing buttons first
@@ -623,7 +689,19 @@
         if (existingButton) {
             existingButton.remove();
         }
+        const existingCopyButton = document.querySelector('.zhihu-copy-button');
+        if (existingCopyButton) {
+            existingCopyButton.remove();
+        }
 
+        // Add copy button
+        const copyButton = document.createElement('button');
+        copyButton.textContent = '复制链接';
+        copyButton.className = 'zhihu-copy-button';
+        copyButton.addEventListener('click', copyArticleLink);
+        document.body.appendChild(copyButton);
+
+        // Add download button
         const button = document.createElement('button');
         button.textContent = 'Download as Markdown';
         button.className = 'zhihu-dl-button';
