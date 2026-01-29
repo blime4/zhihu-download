@@ -655,13 +655,13 @@
             // Show success message
             const copyButton = document.querySelector('.zhihu-copy-button');
             const originalText = copyButton.textContent;
-            copyButton.textContent = '✅ 已复制';
+            copyButton.textContent = '✓ Copied';
 
             setTimeout(() => {
                 copyButton.textContent = originalText;
             }, 2000);
 
-            showProgress('链接已复制到剪贴板', 2000);
+            showProgress('Link copied to clipboard', 2000);
         } catch (error) {
             // Fallback for older browsers
             const textArea = document.createElement('textarea');
@@ -673,9 +673,9 @@
 
             try {
                 document.execCommand('copy');
-                showProgress('链接已复制到剪贴板', 2000);
+                showProgress('Link copied to clipboard', 2000);
             } catch (err) {
-                showProgress('复制失败，请手动复制链接', 3000);
+                showProgress('Copy failed, please copy manually', 3000);
             }
 
             document.body.removeChild(textArea);
@@ -696,7 +696,7 @@
 
         // Add copy button
         const copyButton = document.createElement('button');
-        copyButton.textContent = '复制链接';
+        copyButton.textContent = 'Copy Link';
         copyButton.className = 'zhihu-copy-button';
         copyButton.addEventListener('click', copyArticleLink);
         document.body.appendChild(copyButton);
