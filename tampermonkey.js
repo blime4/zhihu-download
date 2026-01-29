@@ -859,7 +859,9 @@
         const token = getGitHubToken();
 
         if (!token) {
-            throw new Error('Please set GitHub Token first (Tampermonkey menu > Set GitHub Token)');
+            // Auto-open GitHub Token creation page
+            window.open('https://github.com/settings/tokens/new?scopes=gist&description=Zhihu2Markdown', '_blank');
+            throw new Error('请先创建 GitHub Token (新标签页已打开)，然后通过 Tampermonkey 菜单设置 Token');
         }
 
         showProgress('Uploading to Gist...');
@@ -900,20 +902,38 @@
     // Show token input dialog
     const showTokenDialog = () => {
         const currentToken = getGitHubToken();
+
+        // Ask if user wants to create a new token first
+        if (!currentToken) {
+            const createNew = confirm(
+                'GitHub Token 设置\n\n' +
+                '还没有设置 Token，是否现在创建？\n\n' +
+                '点击 "确定" 打开 Token 创建页面\n' +
+                '点击 "取消" 手动输入已有 Token'
+            );
+
+            if (createNew) {
+                window.open('https://github.com/settings/tokens/new?scopes=gist&description=Zhihu2Markdown', '_blank');
+                alert('请在新打开的页面创建 Token，然后回到这里粘贴 Token');
+            }
+        }
+
         const token = prompt(
-            'Enter your GitHub Personal Access Token:\n\n' +
-            'Get token from: https://github.com/settings/tokens/new\n' +
-            'Required scopes: gist (Create gists)\n\n' +
-            'Leave empty to remove current token.',
+            '请输入 GitHub Personal Access Token:\n\n' +
+            '1. 如果还没有 Token，点击上方 "确定" 创建\n' +
+            '2. 创建后只勾选 gist 权限\n' +
+            '3. 复制生成的 Token 粘贴到这里\n\n' +
+            '当前 Token: ' + (currentToken ? '已设置' : '未设置') + '\n\n' +
+            '留空可删除当前 Token',
             currentToken
         );
 
         if (token !== null) {
             setGitHubToken(token);
             if (token) {
-                alert('GitHub Token saved successfully!');
+                alert('✅ Token 已保存！现在可以使用 Copy Markdown Link 功能了');
             } else {
-                alert('GitHub Token removed.');
+                alert('🗑️ Token 已删除');
             }
         }
     };
