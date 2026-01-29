@@ -794,6 +794,45 @@
     // Copy link function - uploads to GitHub Gist and copies the URL
     const copyMarkdownLink = async () => {
         try {
+            // Check if Token exists first, if not, prompt for it
+            let token = getGitHubToken();
+            if (!token) {
+                showProgress('需要 GitHub Token...');
+
+                // Ask user what they want to do
+                const choice = confirm(
+                    '📝 首次使用需要 GitHub Token\n\n' +
+                    '请选择：\n' +
+                    '✅ 点击 "确定" - 打开 Token 创建页面（推荐）\n' +
+                    '❌ 点击 "取消" - 手动输入已有 Token\n\n' +
+                    '创建后请回到这里再次点击按钮'
+                );
+
+                if (choice) {
+                    // User wants to create token
+                    GM_openInTab('https://github.com/settings/tokens/new?scopes=gist&description=Zhihu2Markdown', {active: true});
+                    showProgress('请创建 Token 后，再次点击此按钮粘贴 Token', 6000);
+                    return;
+                } else {
+                    // User wants to paste token manually
+                    const manualToken = prompt(
+                        '🔑 请粘贴 GitHub Token\n\n' +
+                        '1. 在打开的页面点击 "Generate token"\n' +
+                        '2. 复制生成的 Token（开头是 ghp_）\n' +
+                        '3. 粘贴到下方',
+                        ''
+                    );
+
+                    if (manualToken) {
+                        setGitHubToken(manualToken);
+                        showProgress('Token 已保存！正在上传...', 2000);
+                    } else {
+                        showProgress('已取消。请通过 Tampermonkey 菜单设置 Token', 3000);
+                        return;
+                    }
+                }
+            }
+
             showProgress('Generating markdown...');
 
             // Generate markdown content
@@ -904,27 +943,15 @@
     const showTokenDialog = () => {
         const currentToken = getGitHubToken();
 
-        // Ask if user wants to create a new token first
-        if (!currentToken) {
-            const createNew = confirm(
-                'GitHub Token 设置\n\n' +
-                '还没有设置 Token，是否现在创建？\n\n' +
-                '点击 "确定" 打开 Token 创建页面\n' +
-                '点击 "取消" 手动输入已有 Token'
-            );
-
-            if (createNew) {
-                GM_openInTab('https://github.com/settings/tokens/new?scopes=gist&description=Zhihu2Markdown', {active: true});
-                alert('请在新打开的页面创建 Token，然后回到这里粘贴 Token');
-            }
-        }
-
         const token = prompt(
-            '请输入 GitHub Personal Access Token:\n\n' +
-            '1. 如果还没有 Token，点击上方 "确定" 创建\n' +
-            '2. 创建后只勾选 gist 权限\n' +
-            '3. 复制生成的 Token 粘贴到这里\n\n' +
-            '当前 Token: ' + (currentToken ? '已设置' : '未设置') + '\n\n' +
+            '🔑 GitHub Token 设置\n\n' +
+            '还没有 Token？请按以下步骤创建：\n' +
+            '1. 点击下方 "取消" 关闭此对话框\n' +
+            '2. 点击 Tampermonkey 菜单中的 "📖 创建 GitHub Token"\n' +
+            '3. 在打开的页面点击 "Generate token"\n' +
+            '4. 复制 Token，再回到这里粘贴\n\n' +
+            '已有 Token？直接粘贴到下方：\n\n' +
+            '当前状态: ' + (currentToken ? '✅ 已设置' : '❌ 未设置') + '\n\n' +
             '留空可删除当前 Token',
             currentToken
         );
@@ -939,8 +966,14 @@
         }
     };
 
-    // Register menu command for setting token
-    GM_registerMenuCommand('⚙️ Set GitHub Token', showTokenDialog);
+    // Open token creation page
+    const openTokenCreation = () => {
+        GM_openInTab('https://github.com/settings/tokens/new?scopes=gist&description=Zhihu2Markdown', {active: true});
+    };
+
+    // Register menu commands
+    GM_registerMenuCommand('⚙️ 设置 GitHub Token', showTokenDialog);
+    GM_registerMenuCommand('📖 创建 GitHub Token', openTokenCreation);
 
     // Add download button
     const addDownloadButton = () => {
