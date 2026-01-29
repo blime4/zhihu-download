@@ -645,6 +645,26 @@
         }
     };
 
+    // Detect page type based on URL
+    const detectPageType = () => {
+        const url = window.location.href;
+
+        if (url.includes('zhuanlan.zhihu.com/p/')) {
+            return 'article';
+        } else if (url.includes('zhihu.com/question/') && url.includes('/answer/')) {
+            return 'answer';
+        } else if (url.includes('zhihu.com/zvideo/')) {
+            return 'video';
+        } else if (url.includes('blog.csdn.net') && url.includes('/article/')) {
+            return 'csdn';
+        } else if (url.includes('mp.weixin.qq.com/s')) {
+            return 'wechat';
+        } else if (url.includes('juejin.cn/post/')) {
+            return 'juejin';
+        }
+        return 'unknown';
+    };
+
     // Generate markdown content (returns the markdown text)
     const generateMarkdownContent = async () => {
         const pageType = detectPageType();
