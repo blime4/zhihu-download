@@ -687,6 +687,11 @@
         }
     };
 
+    // Format markdown with metadata (already done by processContent, just return as-is)
+    const formatMarkdown = (title, author, markdown, date, url) => {
+        return markdown;
+    };
+
     // Helper functions to generate markdown for each page type
     const generateArticleMarkdown = async () => {
         const title = document.querySelector('h1.Post-Title')?.textContent.trim() || 'Untitled';
