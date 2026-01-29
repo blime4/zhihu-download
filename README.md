@@ -16,7 +16,10 @@
   <a href="http://8.130.108.230:5000/" target="_blank">
     <img alt="Web" src="https://img.shields.io/badge/演示网站-Web-red" />
   </a>
-  <a href="https://github.com/chenluda/zhihu-download#3-%E6%B2%B9%E7%8C%B4tampermonkey%E8%84%9A%E6%9C%AC">
+  <a href="https://github.com/chenluda/zhihu-download#3-github-pages-%E7%BA%AF%E9%9D%99%E6%80%81%E9%83%A8%E7%BD%B2%E6%96%B9%E6%A1%88">
+    <img alt="GitHub Pages" src="https://img.shields.io/badge/GitHub_Pages-免费部署-brightgreen" />
+  </a>
+  <a href="https://github.com/chenluda/zhihu-download#4-%E6%B2%B9%E7%8C%B4tampermonkey%E8%84%9A%E6%9C%AC">
     <img alt="Support" src="https://img.shields.io/badge/支持-TramperMonkey-blue" />
   </a>
 </div>
@@ -94,52 +97,95 @@ python app.py
 > markdown_title = get_valid_filename(title)
 > ```
 
-## 3. 油猴（TamperMonkey）脚本
+## 3. GitHub Pages 纯静态部署方案 🆕
 
-3.1 安装油猴插件
+> **推荐方案**：完全免费，无需服务器，零维护成本！
+
+### 3.1 方案对比
+
+| 特性 | GitHub Pages (纯前端) | Flask 应用 |
+|------|---------------------|----------|
+| 成本 | **完全免费** | 需要服务器费用 |
+| 部署难度 | 简单 (一次配置) | 需要配置环境 |
+| 维护成本 | **零维护** | 需要维护服务器 |
+| 性能 | **全球 CDN 加速** | 取决于服务器位置 |
+| 功能 | 完整功能 | 完整功能 |
+| 用户隐私 | **100% 本地处理** | 需信任服务器 |
+
+### 3.2 部署步骤
+
+1. **启用 GitHub Pages**
+   - 进入仓库 **Settings** → **Pages**
+   - Source 选择 `main` 分支的 `/docs` 目录
+   - 点击 **Save**
+
+2. **访问网站**
+   - 等待 1-2 分钟部署完成
+   - 访问：`https://你的用户名.github.io/zhihu-download/`
+
+3. **安装 Tampermonkey 脚本**
+   - 在网站上点击"安装脚本"按钮
+   - 访问文章页面，点击右上角下载按钮即可
+
+### 3.3 工作原理
+
+```
+GitHub Pages (展示网站) → 用户安装 Tampermonkey → 浏览器本地处理 → 下载 ZIP
+```
+
+- **无需服务器**：所有处理在用户浏览器完成
+- **无 CORS 限制**：Tampermonkey 绕过跨域限制
+- **隐私保护**：数据不经过任何服务器
+
+详细说明请查看：[GitHub Pages 部署指南](docs/GITHUB_PAGES.md)
+
+## 4. 油猴（TamperMonkey）脚本
+
+4.1 安装油猴插件
 - [Chrome](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
 - [Microsoft Edge](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd?refid=bingshortanswersdownload)
 
-3.2 运行脚本
+4.2 运行脚本
 ![420728733-51e8bc20-7dbd-49b2-ba73-89cdfc917200](https://github.com/user-attachments/assets/d571ed29-b3f1-45a9-b216-0903598a3648)
 
-## 4. 容器部署（以阿里云为例）
+## 5. 容器部署（以阿里云为例）
 
-4.1 克隆项目
+5.1 克隆项目
 ```bash
 git clone git@github.com:chenluda/zhihu-download.git
 ```
-4.2 进入项目目录
+5.2 进入项目目录
 ```bash
 cd zhihu-download
 ```
-4.3 构建本地镜像
+5.3 构建本地镜像
 ```bash
 docker build -t zhihu2markdown .
 ```
-4.4 连接远程仓库（阿里云容器镜像服务 ACR：https://www.aliyun.com/product/acr/）
+5.4 连接远程仓库（阿里云容器镜像服务 ACR：https://www.aliyun.com/product/acr/）
 ```bash
 docker login --username=xxx registry.cn-xxx.aliyuncs.com
 ```
-4.5 标记镜像
+5.5 标记镜像
 ```bash
 docker tag zhihu2markdown:latest registry.cn-xxx.aliyuncs.com/xxx/zhihu2markdown:latest
 ```
-4.6 推送镜像
+5.6 推送镜像
 ```bash
 docker push registry.cn-xxx.aliyuncs.com/xxx/zhihu2markdown:latest
 ```
-4.7 云服务器拉取镜像
+5.7 云服务器拉取镜像
 ```bash
 docker pull registry.cn-xxx.aliyuncs.com/xxx/zhihu2markdown:latest
 ```
-4.8 运行容器
+5.8 运行容器
 ```bash
 docker run --rm -p 5000:5000 registry.cn-xxx.aliyuncs.com/xxx/zhihu2markdown:latest
 ```
 
-## 5. 更新日志
+## 6. 更新日志
 
+* 2025-01-29：新增 GitHub Pages 纯静态部署方案，完全免费无需服务器。
 * 2025-03-10：添加 TamperMonkey 脚本，优化下载体验。
 * 2025-03-03：添加日志记录；专栏下载报错跳过；添加 Dockerfile。
 * 2025-01-25：新增微信公众号文章下载功能；增加 requirements.txt 文件。
@@ -157,6 +203,6 @@ docker run --rm -p 5000:5000 registry.cn-xxx.aliyuncs.com/xxx/zhihu2markdown:lat
 * 2023-05-29：适应知乎最新 HTML 结构。
 * 2023-11-16：优化链接等格式。
 
-## 6. 趋势
+## 7. 趋势
 
 [![Star History Chart](https://api.star-history.com/svg?repos=chenluda/zhihu-download&type=Date)](https://star-history.com/#chenluda/zhihu-download&Date)
