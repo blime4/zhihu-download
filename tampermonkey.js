@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Zhihu2Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Download Zhihu content (articles, answers, videos, columns) as Markdown
 // @author       Glenn
 // @match        *://zhuanlan.zhihu.com/p/*
@@ -15,6 +15,9 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
 // @grant        GM_addStyle
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_registerMenuCommand
 // @require      https://cdn.jsdelivr.net/npm/turndown@7.1.1/dist/turndown.js
 // @run-at       document-end
 // ==/UserScript==
@@ -787,7 +790,7 @@
         return formatMarkdown(title, author, markdown, date, url);
     };
 
-    // Copy link function - copies Base64 Data URL of markdown
+    // Copy link function - uploads to GitHub Gist and copies the URL
     const copyMarkdownLink = async () => {
         try {
             showProgress('Generating markdown...');
@@ -795,14 +798,32 @@
             // Generate markdown content
             const markdown = await generateMarkdownContent();
 
-            // Convert to Base64
-            const base64 = btoa(unescape(encodeURIComponent(markdown)));
+            // Generate filename
+            const pageType = detectPageType();
+            let title = 'Untitled';
+            let author = 'Unknown';
+            let date = '';
 
-            // Create data URL
-            const dataUrl = `data:text/markdown;base64,${base64}`;
+            // Extract metadata based on page type
+            if (pageType === 'article') {
+                title = document.querySelector('h1.Post-Title')?.textContent.trim() || 'Untitled';
+                author = document.querySelector('div.AuthorInfo meta[itemprop="name"]')?.getAttribute('content') || 'Unknown';
+                date = getArticleDate('div.ContentItem-time') || '';
+            } else if (pageType === 'answer') {
+                title = document.querySelector('h1.QuestionHeader-title')?.textContent.trim() || 'Untitled';
+                author = document.querySelector('div.AuthorInfo-name')?.textContent.trim() || 'Unknown';
+                date = getArticleDate('span.ContentItem-time') || '';
+            }
 
-            // Copy to clipboard
-            await navigator.clipboard.writeText(dataUrl);
+            const filename = date ?
+                getValidFilename(`(${date})${title}_${author}.md`) :
+                getValidFilename(`${title}_${author}.md`);
+
+            // Upload to Gist
+            const gistUrl = await uploadToGist(markdown, filename);
+
+            // Copy Gist URL to clipboard
+            await navigator.clipboard.writeText(gistUrl);
 
             // Show success message
             const copyButton = document.querySelector('.zhihu-copy-button');
@@ -813,12 +834,92 @@
                 copyButton.textContent = originalText;
             }, 2000);
 
-            showProgress('Markdown link copied! Paste in address bar to download', 3000);
+            showProgress('Gist URL copied! Open to view/download Markdown', 3000);
         } catch (error) {
             console.error('Error copying markdown link:', error);
-            showProgress(`Error: ${error.message}`, 3000);
+            showProgress(`Error: ${error.message}`, 5000);
         }
     };
+
+    // GitHub Gist API functions
+    const GITHUB_GIST_API = 'https://api.github.com/gists';
+
+    // Get GitHub Token from storage
+    const getGitHubToken = () => {
+        return GM_getValue('github_token', '');
+    };
+
+    // Save GitHub Token to storage
+    const setGitHubToken = (token) => {
+        GM_setValue('github_token', token);
+    };
+
+    // Upload markdown to GitHub Gist
+    const uploadToGist = async (markdown, filename) => {
+        const token = getGitHubToken();
+
+        if (!token) {
+            throw new Error('Please set GitHub Token first (Tampermonkey menu > Set GitHub Token)');
+        }
+
+        showProgress('Uploading to Gist...');
+
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: GITHUB_GIST_API,
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Content-Type': 'application/json',
+                },
+                data: JSON.stringify({
+                    description: filename,
+                    public: false,
+                    files: {
+                        [filename]: {
+                            content: markdown
+                        }
+                    }
+                }),
+                onload: (response) => {
+                    if (response.status >= 200 && response.status < 300) {
+                        const data = JSON.parse(response.responseText);
+                        resolve(data.html_url);
+                    } else {
+                        reject(new Error(`GitHub API Error: ${response.status} - ${response.responseText}`));
+                    }
+                },
+                onerror: (error) => {
+                    reject(new Error('Network error while uploading to Gist'));
+                }
+            });
+        });
+    };
+
+    // Show token input dialog
+    const showTokenDialog = () => {
+        const currentToken = getGitHubToken();
+        const token = prompt(
+            'Enter your GitHub Personal Access Token:\n\n' +
+            'Get token from: https://github.com/settings/tokens/new\n' +
+            'Required scopes: gist (Create gists)\n\n' +
+            'Leave empty to remove current token.',
+            currentToken
+        );
+
+        if (token !== null) {
+            setGitHubToken(token);
+            if (token) {
+                alert('GitHub Token saved successfully!');
+            } else {
+                alert('GitHub Token removed.');
+            }
+        }
+    };
+
+    // Register menu command for setting token
+    GM_registerMenuCommand('⚙️ Set GitHub Token', showTokenDialog);
 
     // Add download button
     const addDownloadButton = () => {
