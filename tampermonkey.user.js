@@ -989,7 +989,7 @@
 
         // Add copy button
         const copyButton = document.createElement('button');
-        copyButton.textContent = 'Copy Markdown Link';
+        copyButton.textContent = 'Upload to my GitHub Gist';
         copyButton.className = 'zhihu-copy-button';
         copyButton.addEventListener('click', copyMarkdownLink);
         document.body.appendChild(copyButton);
