@@ -894,7 +894,7 @@
         GM_setValue('github_token', token);
     };
 
-    // Upload markdown to GitHub Gist
+    // Upload markdown to GitHub Gist (update if exists, create if not)
     const uploadToGist = async (markdown, filename) => {
         const token = getGitHubToken();
 
@@ -904,12 +904,51 @@
             throw new Error('请先创建 GitHub Token (新标签页已打开)，然后通过 Tampermonkey 菜单设置 Token');
         }
 
-        showProgress('Uploading to Gist...');
+        showProgress('Checking existing gists...');
+
+        // First, get all gists to check if file already exists
+        const existingGistId = await new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: GITHUB_GIST_API,
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                },
+                onload: (response) => {
+                    if (response.status >= 200 && response.status < 300) {
+                        const gists = JSON.parse(response.responseText);
+
+                        // Check if any gist has a file with the same name
+                        for (const gist of gists) {
+                            if (gist.files && gist.files[filename]) {
+                                resolve(gist.id);
+                                return;
+                            }
+                        }
+                        resolve(null);
+                    } else {
+                        // If list fails, just create new
+                        resolve(null);
+                    }
+                },
+                onerror: () => {
+                    // If list fails, just create new
+                    resolve(null);
+                }
+            });
+        });
+
+        showProgress(existingGistId ? 'Updating existing gist...' : 'Creating new gist...');
+
+        // Update existing gist or create new one
+        const method = existingGistId ? 'PATCH' : 'POST';
+        const url = existingGistId ? `${GITHUB_GIST_API}/${existingGistId}` : GITHUB_GIST_API;
 
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
-                method: 'POST',
-                url: GITHUB_GIST_API,
+                method: method,
+                url: url,
                 headers: {
                     'Authorization': `token ${token}`,
                     'Accept': 'application/vnd.github.v3+json',
@@ -917,7 +956,6 @@
                 },
                 data: JSON.stringify({
                     description: filename,
-                    public: false,
                     files: {
                         [filename]: {
                             content: markdown
