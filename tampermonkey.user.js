@@ -18,6 +18,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
+// @grant        GM_openInTab
 // @require      https://cdn.jsdelivr.net/npm/turndown@7.1.1/dist/turndown.js
 // @run-at       document-end
 // ==/UserScript==
@@ -860,7 +861,7 @@
 
         if (!token) {
             // Auto-open GitHub Token creation page
-            window.open('https://github.com/settings/tokens/new?scopes=gist&description=Zhihu2Markdown', '_blank');
+            GM_openInTab('https://github.com/settings/tokens/new?scopes=gist&description=Zhihu2Markdown', {active: true});
             throw new Error('请先创建 GitHub Token (新标签页已打开)，然后通过 Tampermonkey 菜单设置 Token');
         }
 
@@ -913,7 +914,7 @@
             );
 
             if (createNew) {
-                window.open('https://github.com/settings/tokens/new?scopes=gist&description=Zhihu2Markdown', '_blank');
+                GM_openInTab('https://github.com/settings/tokens/new?scopes=gist&description=Zhihu2Markdown', {active: true});
                 alert('请在新打开的页面创建 Token，然后回到这里粘贴 Token');
             }
         }
