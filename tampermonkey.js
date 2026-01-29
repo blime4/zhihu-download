@@ -645,12 +645,139 @@
         }
     };
 
-    // Copy link function
-    const copyArticleLink = async () => {
+    // Generate markdown content (returns the markdown text)
+    const generateMarkdownContent = async () => {
+        const pageType = detectPageType();
+
+        switch (pageType) {
+            case 'article':
+                return generateArticleMarkdown();
+            case 'answer':
+                return generateAnswerMarkdown();
+            case 'video':
+                return generateVideoMarkdown();
+            case 'csdn':
+                return generateCsdnMarkdown();
+            case 'wechat':
+                return generateWechatMarkdown();
+            case 'juejin':
+                return generateJuejinMarkdown();
+            default:
+                throw new Error('Unsupported page type');
+        }
+    };
+
+    // Helper functions to generate markdown for each page type
+    const generateArticleMarkdown = async () => {
+        const title = document.querySelector('h1.Post-Title')?.textContent.trim() || 'Untitled';
+        const content = document.querySelector('div.Post-RichTextContainer');
+        const author = document.querySelector('div.AuthorInfo meta[itemprop="name"]')?.getAttribute('content') || 'Unknown';
+        const date = getArticleDate('div.ContentItem-time');
         const url = window.location.href;
 
+        if (!content) {
+            throw new Error('Could not find content on this page');
+        }
+
+        const markdown = processContent(title, content, author, date, url);
+        return formatMarkdown(title, author, markdown, date, url);
+    };
+
+    const generateAnswerMarkdown = async () => {
+        const title = document.querySelector('h1.QuestionHeader-title')?.textContent.trim() ||
+                     document.querySelector('div.QuestionHeader-main h1')?.textContent.trim() || 'Untitled';
+        const content = document.querySelector('div.RichContent-inner');
+        const author = document.querySelector('div.AuthorInfo-name')?.textContent.trim() || 'Unknown';
+        const date = getArticleDate('span.ContentItem-time');
+        const url = window.location.href;
+
+        if (!content) {
+            throw new Error('Could not find answer content on this page');
+        }
+
+        const markdown = processContent(title, content, author, date, url);
+        return formatMarkdown(title, author, markdown, date, url);
+    };
+
+    const generateVideoMarkdown = async () => {
+        const title = document.querySelector('h1.VideoTitle')?.textContent.trim() || 'Untitled';
+        const author = document.querySelector('a.AuthorInfo-name')?.textContent.trim() || 'Unknown';
+        const date = getArticleDate('span.VideoEntry-timeText');
+        const videoUrl = document.querySelector('video.zd-video')?.src || document.querySelector('video')?.src || '';
+        const url = window.location.href;
+
+        let markdown = `# ${title}\n\n`;
+        markdown += `**Author:** ${author}\n\n`;
+        if (date) {
+            markdown += `**Date:** ${date}\n\n`;
+        }
+        markdown += `**Video URL:** [Download Video](${videoUrl})\n\n`;
+        markdown += `Note: You can download the video by clicking the link above or copying the URL.`;
+
+        return formatMarkdown(title, author, markdown, date, url);
+    };
+
+    const generateCsdnMarkdown = async () => {
+        const title = document.querySelector('h1.title-article')?.textContent.trim() || 'Untitled';
+        const content = document.querySelector('article.blog-content-box');
+        const author = document.querySelector('a.follow-nickName')?.textContent.trim() || 'Unknown';
+        const date = document.querySelector('span.time')?.textContent.trim().split(' ')[0] || '';
+        const url = window.location.href;
+
+        if (!content) {
+            throw new Error('Could not find CSDN content');
+        }
+
+        const markdown = processContent(title, content, author, date, url);
+        return formatMarkdown(title, author, markdown, date, url);
+    };
+
+    const generateWechatMarkdown = async () => {
+        const title = document.querySelector('h1.activity_title')?.textContent.trim() || 'Untitled';
+        const content = document.querySelector('div.rich_media_content');
+        const author = document.querySelector('a#js_name')?.textContent.trim() || 'Unknown';
+        const date = document.querySelector('#publish_time')?.textContent.trim() || '';
+        const url = window.location.href;
+
+        if (!content) {
+            throw new Error('Could not find WeChat content');
+        }
+
+        const markdown = processContent(title, content, author, date, url);
+        return formatMarkdown(title, author, markdown, date, url);
+    };
+
+    const generateJuejinMarkdown = async () => {
+        const title = document.querySelector('h1.article-title')?.textContent.trim() || 'Untitled';
+        const content = document.querySelector('article.markdown-body');
+        const author = document.querySelector('span.user-name')?.textContent.trim() || 'Unknown';
+        const date = document.querySelector('span.meta-box')?.textContent.trim().match(/(\d{4}-\d{2}-\d{2})/)?.[1] || '';
+        const url = window.location.href;
+
+        if (!content) {
+            throw new Error('Could not find Juejin content');
+        }
+
+        const markdown = processContent(title, content, author, date, url);
+        return formatMarkdown(title, author, markdown, date, url);
+    };
+
+    // Copy link function - copies Base64 Data URL of markdown
+    const copyMarkdownLink = async () => {
         try {
-            await navigator.clipboard.writeText(url);
+            showProgress('Generating markdown...');
+
+            // Generate markdown content
+            const markdown = await generateMarkdownContent();
+
+            // Convert to Base64
+            const base64 = btoa(unescape(encodeURIComponent(markdown)));
+
+            // Create data URL
+            const dataUrl = `data:text/markdown;base64,${base64}`;
+
+            // Copy to clipboard
+            await navigator.clipboard.writeText(dataUrl);
 
             // Show success message
             const copyButton = document.querySelector('.zhihu-copy-button');
@@ -661,24 +788,10 @@
                 copyButton.textContent = originalText;
             }, 2000);
 
-            showProgress('Link copied to clipboard', 2000);
+            showProgress('Markdown link copied! Paste in address bar to download', 3000);
         } catch (error) {
-            // Fallback for older browsers
-            const textArea = document.createElement('textarea');
-            textArea.value = url;
-            textArea.style.position = 'fixed';
-            textArea.style.opacity = '0';
-            document.body.appendChild(textArea);
-            textArea.select();
-
-            try {
-                document.execCommand('copy');
-                showProgress('Link copied to clipboard', 2000);
-            } catch (err) {
-                showProgress('Copy failed, please copy manually', 3000);
-            }
-
-            document.body.removeChild(textArea);
+            console.error('Error copying markdown link:', error);
+            showProgress(`Error: ${error.message}`, 3000);
         }
     };
 
@@ -696,9 +809,9 @@
 
         // Add copy button
         const copyButton = document.createElement('button');
-        copyButton.textContent = 'Copy Link';
+        copyButton.textContent = 'Copy Markdown Link';
         copyButton.className = 'zhihu-copy-button';
-        copyButton.addEventListener('click', copyArticleLink);
+        copyButton.addEventListener('click', copyMarkdownLink);
         document.body.appendChild(copyButton);
 
         // Add download button
