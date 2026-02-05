@@ -13,6 +13,10 @@
 // @match        *://mp.weixin.qq.com/s*
 // @match        *://juejin.cn/post/*
 // @match        *://lmsys.org/blog/*
+// @match        *://docs.nvda.net.cn/*
+// @match        *://docs.pytorch.org/*
+// @match        *://docs.huggingface.co/*
+// @match        *://tensorflow.org/*/guide/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
 // @grant        GM_addStyle
@@ -581,6 +585,67 @@
         }
     };
 
+    // Download generic docs article function
+    const downloadDocsArticle = async () => {
+        try {
+            showProgress('Processing docs article...');
+
+            // Extract title from multiple sources
+            let title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+                        document.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
+                        document.querySelector('h1')?.textContent.trim() ||
+                        document.title?.split('|')[0]?.split('-')[0]?.trim() ||
+                        'Untitled';
+
+            // Try multiple selectors for content
+            let content = document.querySelector('article') ||
+                          document.querySelector('[role="main"]') ||
+                          document.querySelector('.document') ||
+                          document.querySelector('.content') ||
+                          document.querySelector('.markdown-body') ||
+                          document.querySelector('main') ||
+                          document.querySelector('div.body');
+
+            // If still not found, clone body and remove non-content elements
+            if (!content) {
+                content = document.body.cloneNode(true);
+                content.querySelectorAll('nav, header, footer, aside, .sidebar, .navigation, .menu, script, style').forEach(el => el.remove());
+            }
+
+            // Convert relative image URLs to absolute
+            const baseUrl = window.location.origin;
+            content.querySelectorAll('img').forEach(img => {
+                const src = img.getAttribute('src');
+                if (src && src.startsWith('/')) {
+                    img.setAttribute('src', baseUrl + src);
+                }
+            });
+
+            // Convert relative links to absolute
+            content.querySelectorAll('a').forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && href.startsWith('/')) {
+                    link.setAttribute('href', baseUrl + href);
+                }
+            });
+
+            const url = window.location.href;
+            const author = 'Docs';
+            const date = '';
+
+            // Process content
+            const markdown = processContent(title, content, author, date, url);
+
+            // Download the markdown
+            const filename = downloadMarkdownFile(title, author, markdown, date);
+            showProgress(`Downloaded: ${filename}`, 3000);
+
+        } catch (error) {
+            console.error('Error downloading docs article:', error);
+            showProgress(`Error: ${error.message}`, 3000);
+        }
+    };
+
     // Show progress message
     const showProgress = (message, timeout = 0) => {
         let progress = document.querySelector('.zhihu-dl-progress');
@@ -713,6 +778,8 @@
             downloadJuejinArticle();
         } else if (url.includes('lmsys.org/blog/')) {
             downloadLmsysArticle();
+        } else if (url.includes('docs.') || url.includes('/docs/')) {
+            downloadDocsArticle();
         } else {
             alert('This page type is not supported for download.');
         }
@@ -736,6 +803,8 @@
             return 'juejin';
         } else if (url.includes('lmsys.org/blog/')) {
             return 'lmsys';
+        } else if (url.includes('docs.') || url.includes('/docs/')) {
+            return 'docs';
         }
         return 'unknown';
     };
@@ -759,6 +828,8 @@
                 return generateJuejinMarkdown();
             case 'lmsys':
                 return generateLmsysMarkdown();
+            case 'docs':
+                return generateDocsMarkdown();
             default:
                 throw new Error('Unsupported page type');
         }
@@ -916,6 +987,54 @@
         return formatMarkdown(title, author, markdown, date, url);
     };
 
+    const generateDocsMarkdown = async () => {
+        // Extract title from multiple sources
+        const title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+                      document.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
+                      document.querySelector('h1')?.textContent.trim() ||
+                      document.title?.split('|')[0]?.split('-')[0]?.trim() ||
+                      'Untitled';
+
+        // Try multiple selectors for content
+        let content = document.querySelector('article') ||
+                       document.querySelector('[role="main"]') ||
+                       document.querySelector('.document') ||
+                       document.querySelector('.content') ||
+                       document.querySelector('.markdown-body') ||
+                       document.querySelector('main') ||
+                       document.querySelector('div.body');
+
+        // If still not found, clone body and remove non-content elements
+        if (!content) {
+            content = document.body.cloneNode(true);
+            content.querySelectorAll('nav, header, footer, aside, .sidebar, .navigation, .menu, script, style').forEach(el => el.remove());
+        }
+
+        // Convert relative image URLs to absolute
+        const baseUrl = window.location.origin;
+        content.querySelectorAll('img').forEach(img => {
+            const src = img.getAttribute('src');
+            if (src && src.startsWith('/')) {
+                img.setAttribute('src', baseUrl + src);
+            }
+        });
+
+        // Convert relative links to absolute
+        content.querySelectorAll('a').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && href.startsWith('/')) {
+                link.setAttribute('href', baseUrl + href);
+            }
+        });
+
+        const url = window.location.href;
+        const author = 'Docs';
+        const date = '';
+
+        const markdown = processContent(title, content, author, date, url);
+        return formatMarkdown(title, author, markdown, date, url);
+    };
+
     // Copy link function - uploads to GitHub Gist and copies the URL
     const copyMarkdownLink = async () => {
         try {
@@ -999,6 +1118,13 @@
                     }
                 }
                 if (!author) author = 'LMSYS Team';
+            } else if (pageType === 'docs') {
+                title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+                        document.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
+                        document.querySelector('h1')?.textContent.trim() ||
+                        document.title?.split('|')[0]?.split('-')[0]?.trim() ||
+                        'Untitled';
+                author = 'Docs';
             }
 
             const filename = date ?

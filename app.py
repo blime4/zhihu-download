@@ -9,6 +9,7 @@ from main_csdn import CsdnParser
 from main_weixin import WeixinParser
 from main_juejin import JuejinParser
 from main_lmsys import LMSYSParser
+from main_docs import DocsParser
 import json
 import zipfile
 
@@ -29,7 +30,7 @@ app = Flask(__name__)
 def create_zip_from_directory(directory, zip_path):
     """从给定目录创建ZIP文件"""
     supported_extensions = ['.md', '.jpg', '.png', '.gif', '.mp4', '.txt']
-    log_files = ['zhihu_download.log', 'weixin_download.log', 'csdn_download.log', 'lmsys_download.log']
+    log_files = ['zhihu_download.log', 'weixin_download.log', 'csdn_download.log', 'lmsys_download.log', 'docs_download.log']
 
     try:
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -52,13 +53,15 @@ def index():
         url = request.form["url"]
         website = request.form["website"].lower()
         keep_logs = request.form.get("keep_logs") == "on"
+        max_pages = int(request.form.get("max_pages", 1))
 
         parser_map = {
             "csdn": (CsdnParser(keep_logs=keep_logs), "csdn"),
             "zhihu": (ZhihuParser(cookies, keep_logs=keep_logs), "zhihu"),
             "weixin": (WeixinParser(keep_logs=keep_logs), "weixin"),
             "juejin": (JuejinParser(keep_logs=keep_logs), "juejin"),
-            "lmsys": (LMSYSParser(keep_logs=keep_logs), "lmsys")
+            "lmsys": (LMSYSParser(keep_logs=keep_logs), "lmsys"),
+            "docs": (DocsParser(keep_logs=keep_logs), "docs")
         }
 
         try:
@@ -71,9 +74,13 @@ def index():
             os.makedirs(tmpdir, exist_ok=True)
             old_cwd = os.getcwd()
             os.chdir(tmpdir)
-            
+
             try:
-                markdown_title = parser.judge_type(url)
+                # DocsParser 支持多页下载
+                if website == "docs":
+                    markdown_title = parser.judge_type(url, max_pages=max_pages)
+                else:
+                    markdown_title = parser.judge_type(url)
                 logger.info(f"Successfully processed {url}, title: {markdown_title}")
             except Exception as e:
                 logger.error(f"Error processing {website} URL {url}: {str(e)}")
@@ -82,11 +89,11 @@ def index():
                     f.write(f"Error processing URL: {url}\n")
                     f.write(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                     f.write(f"Error: {str(e)}\n")
-            
+
             os.chdir(old_cwd)
 
             zip_path = f"{markdown_title}.zip"
-            
+
             if create_zip_from_directory(tmpdir, zip_path):
                 with open(zip_path, "rb") as f:
                     zip_data = io.BytesIO(f.read())
@@ -96,7 +103,7 @@ def index():
                 return send_file(zip_data, download_name=f"{markdown_title}.zip", as_attachment=True)
             else:
                 return "Failed to create zip file", 500
-                
+
         except Exception as e:
             os.chdir(old_cwd)
             logger.error(f"Error in web request for {website} URL: {e}")
@@ -121,6 +128,7 @@ def get_logs():
         'weixin': './logs/weixin_download.log',
         'juejin': './logs/juejin_download.log',
         'lmsys': './logs/lmsys_download.log',
+        'docs': './logs/docs_download.log',
     }
 
     if log_type not in log_files:

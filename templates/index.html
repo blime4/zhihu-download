@@ -290,6 +290,8 @@
             websiteSelect.value = "juejin";
           } else if (url.hostname.includes("lmsys")) {
             websiteSelect.value = "lmsys";
+          } else if (DocsParser && DocsParser.isDocsUrl && DocsParser.isDocsUrl(urlInput.value)) {
+            websiteSelect.value = "docs";
           } else {
             websiteSelect.value = "";
           }
@@ -305,11 +307,20 @@
       function showHideDiv() {
         const websiteSelect = document.getElementById("website");
         const conditionalDiv = document.getElementById("conditionalDiv");
+        const docsOptions = document.getElementById("docsOptions");
 
+        // 知乎 Cookie 选项
         if (websiteSelect.value === "zhihu") {
           conditionalDiv.style.display = "block";
         } else {
           conditionalDiv.style.display = "none";
+        }
+
+        // Docs 选项
+        if (websiteSelect.value === "docs") {
+          docsOptions.style.display = "block";
+        } else {
+          docsOptions.style.display = "none";
         }
       }
 
@@ -380,6 +391,7 @@
               <option value="weixin">微信公众号</option>
               <option value="juejin">稀土掘金</option>
               <option value="lmsys">LMSYS 博客</option>
+              <option value="docs">通用文档 (Docs)</option>
             </select>
           </div>
         </div>
@@ -405,16 +417,29 @@
         
         <div class="form-group">
           <div class="checkbox-wrapper" style="display: flex; align-items: center; margin-bottom: 15px;">
-            <input 
-              type="checkbox" 
-              id="keep_logs" 
-              name="keep_logs" 
+            <input
+              type="checkbox"
+              id="keep_logs"
+              name="keep_logs"
               style="width: auto; margin-right: 10px;"
             >
             <label for="keep_logs" style="margin-bottom: 0;">
               <i class="fas fa-file-alt"></i> 保留日志文件用于调试
             </label>
           </div>
+        </div>
+
+        <div id="docsOptions" class="form-group" style="display: none;">
+          <label for="max_pages"><i class="fas fa-file-alt"></i> 最大下载数量：</label>
+          <select name="max_pages" id="max_pages" style="max-width: 200px;">
+            <option value="1">仅当前页面 (1)</option>
+            <option value="10">小节 (10页)</option>
+            <option value="50" selected>章节 (50页)</option>
+            <option value="100">大章节 (100页)</option>
+          </select>
+          <small style="color: #666; display: block; margin-top: 5px;">
+            适用于文档网站，将自动发现并下载相关页面
+          </small>
         </div>
 
         <button type="submit">
@@ -433,6 +458,7 @@
             <option value="weixin">微信公众号下载日志</option>
             <option value="juejin">稀土掘金下载日志</option>
             <option value="lmsys">LMSYS 博客下载日志</option>
+            <option value="docs">通用文档下载日志</option>
           </select>
           <button type="button" class="refresh-button" onclick="fetchLogs()">
             <i class="fas fa-sync-alt"></i> 刷新
