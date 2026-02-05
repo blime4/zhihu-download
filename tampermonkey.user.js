@@ -527,13 +527,21 @@
                         document.title.replace(' | LMSYS Org', '').trim() ||
                         'Untitled';
 
-            // Try multiple selectors for content
+            // Try multiple selectors for content - LMSYS uses Next.js with different structure
             let content = document.querySelector('article') ||
-                          document.querySelector('.blog-content') ||
-                          document.querySelector('.post-content') ||
-                          document.querySelector('.content') ||
+                          document.querySelector('[class*="markdown"]') ||
+                          document.querySelector('[class*="prose"]') ||
+                          document.querySelector('[class*="blog"]') ||
+                          document.querySelector('[class*="post"]') ||
                           document.querySelector('main') ||
-                          document.body;
+                          document.querySelector('div[class*="content"]');
+
+            // If still not found, clone body and remove non-content elements
+            if (!content) {
+                content = document.body.cloneNode(true);
+                // Remove common non-content elements
+                content.querySelectorAll('nav, header, footer, script, style, iframe').forEach(el => el.remove());
+            }
 
             // Extract author and date from first paragraph (format: "by: Author, Jan 26, 2026")
             let author = 'LMSYS Team';
@@ -552,10 +560,6 @@
             }
 
             const url = window.location.href;
-
-            if (!content || content === document.body) {
-                throw new Error('Could not find content on this page');
-            }
 
             // Process content
             const markdown = processContent(title, content, author, date, url);
@@ -859,11 +863,22 @@
                       document.querySelector('h1')?.textContent.trim() ||
                       document.title.replace(' | LMSYS Org', '').trim() ||
                       'Untitled';
-        const content = document.querySelector('article') ||
-                       document.querySelector('.blog-content') ||
-                       document.querySelector('.post-content') ||
-                       document.querySelector('.content') ||
-                       document.querySelector('main');
+
+        // Try multiple selectors for content - LMSYS uses Next.js
+        let content = document.querySelector('article') ||
+                       document.querySelector('[class*="markdown"]') ||
+                       document.querySelector('[class*="prose"]') ||
+                       document.querySelector('[class*="blog"]') ||
+                       document.querySelector('[class*="post"]') ||
+                       document.querySelector('main') ||
+                       document.querySelector('div[class*="content"]');
+
+        // If still not found, clone body and remove non-content elements
+        if (!content) {
+            content = document.body.cloneNode(true);
+            content.querySelectorAll('nav, header, footer, script, style, iframe').forEach(el => el.remove());
+        }
+
         const url = window.location.href;
 
         // Extract author and date from first paragraph
@@ -880,10 +895,6 @@
                     date = match[2].trim();
                 }
             }
-        }
-
-        if (!content) {
-            throw new Error('Could not find LMSYS content');
         }
 
         const markdown = processContent(title, content, author, date, url);
