@@ -520,14 +520,13 @@
         try {
             showProgress('Processing LMSYS blog article...');
 
-            // Try multiple selectors for title
+            // Try multiple selectors for title - LMSYS stores title in meta
             let title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
                         document.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
-                        document.querySelector('h1')?.textContent.trim() ||
-                        document.title.replace(' | LMSYS Org', '').trim() ||
+                        document.title?.split('|')[0]?.trim() ||
                         'Untitled';
 
-            // Try multiple selectors for content - LMSYS uses Next.js with different structure
+            // Try multiple selectors for content - LMSYS uses Next.js
             let content = document.querySelector('article') ||
                           document.querySelector('[class*="markdown"]') ||
                           document.querySelector('[class*="prose"]') ||
@@ -540,10 +539,18 @@
             if (!content) {
                 content = document.body.cloneNode(true);
                 // Remove common non-content elements
-                content.querySelectorAll('nav, header, footer, script, style, iframe').forEach(el => el.remove());
+                content.querySelectorAll('nav, header, footer, script, style, iframe, .nav, .header, .footer, .menu').forEach(el => el.remove());
             }
 
-            // Extract author and date from first paragraph (format: "by: Author, Jan 26, 2026")
+            // Convert relative image URLs to absolute
+            content.querySelectorAll('img').forEach(img => {
+                const src = img.getAttribute('src');
+                if (src && src.startsWith('/')) {
+                    img.setAttribute('src', 'https://lmsys.org' + src);
+                }
+            });
+
+            // Extract author and date from first paragraph (format: "by: Author, Jan 21, 2026")
             let author = 'LMSYS Team';
             let date = '';
 
@@ -858,10 +865,10 @@
     };
 
     const generateLmsysMarkdown = async () => {
+        // Extract title from meta tags (LMSYS uses Next.js with server-rendered meta)
         const title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
                       document.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
-                      document.querySelector('h1')?.textContent.trim() ||
-                      document.title.replace(' | LMSYS Org', '').trim() ||
+                      document.title?.split('|')[0]?.trim() ||
                       'Untitled';
 
         // Try multiple selectors for content - LMSYS uses Next.js
@@ -876,8 +883,16 @@
         // If still not found, clone body and remove non-content elements
         if (!content) {
             content = document.body.cloneNode(true);
-            content.querySelectorAll('nav, header, footer, script, style, iframe').forEach(el => el.remove());
+            content.querySelectorAll('nav, header, footer, script, style, iframe, .nav, .header, .footer, .menu').forEach(el => el.remove());
         }
+
+        // Convert relative image URLs to absolute
+        content.querySelectorAll('img').forEach(img => {
+            const src = img.getAttribute('src');
+            if (src && src.startsWith('/')) {
+                img.setAttribute('src', 'https://lmsys.org' + src);
+            }
+        });
 
         const url = window.location.href;
 
@@ -963,6 +978,27 @@
                 title = document.querySelector('h1.QuestionHeader-title')?.textContent.trim() || 'Untitled';
                 author = document.querySelector('div.AuthorInfo-name')?.textContent.trim() || 'Unknown';
                 date = getArticleDate('span.ContentItem-time') || '';
+            } else if (pageType === 'lmsys') {
+                title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+                        document.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
+                        document.title?.split('|')[0]?.trim() ||
+                        'Untitled';
+                // Extract author and date from content
+                const contentElement = document.querySelector('article') ||
+                                     document.querySelector('[class*="markdown"]') ||
+                                     document.querySelector('[class*="prose"]') ||
+                                     document.querySelector('main');
+                if (contentElement) {
+                    const firstP = contentElement.querySelector('p');
+                    if (firstP) {
+                        const match = firstP.textContent.match(/^by:\s*(.+?)\s*,\s*([A-Za-z]+\s+\d+,\s*\d{4})/);
+                        if (match) {
+                            author = match[1].trim();
+                            date = match[2].trim();
+                        }
+                    }
+                }
+                if (!author) author = 'LMSYS Team';
             }
 
             const filename = date ?
