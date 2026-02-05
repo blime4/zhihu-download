@@ -8,6 +8,7 @@ from main_zhihu import ZhihuParser
 from main_csdn import CsdnParser
 from main_weixin import WeixinParser
 from main_juejin import JuejinParser
+from main_lmsys import LMSYSParser
 import json
 import zipfile
 
@@ -28,7 +29,7 @@ app = Flask(__name__)
 def create_zip_from_directory(directory, zip_path):
     """从给定目录创建ZIP文件"""
     supported_extensions = ['.md', '.jpg', '.png', '.gif', '.mp4', '.txt']
-    log_files = ['zhihu_download.log', 'weixin_download.log', 'csdn_download.log',]
+    log_files = ['zhihu_download.log', 'weixin_download.log', 'csdn_download.log', 'lmsys_download.log']
 
     try:
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -56,7 +57,8 @@ def index():
             "csdn": (CsdnParser(keep_logs=keep_logs), "csdn"),
             "zhihu": (ZhihuParser(cookies, keep_logs=keep_logs), "zhihu"),
             "weixin": (WeixinParser(keep_logs=keep_logs), "weixin"),
-            "juejin": (JuejinParser(keep_logs=keep_logs), "juejin")
+            "juejin": (JuejinParser(keep_logs=keep_logs), "juejin"),
+            "lmsys": (LMSYSParser(keep_logs=keep_logs), "lmsys")
         }
 
         try:
@@ -118,6 +120,7 @@ def get_logs():
         'csdn': './logs/csdn_download.log',
         'weixin': './logs/weixin_download.log',
         'juejin': './logs/juejin_download.log',
+        'lmsys': './logs/lmsys_download.log',
     }
 
     if log_type not in log_files:
