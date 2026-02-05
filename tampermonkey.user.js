@@ -12,6 +12,7 @@
 // @match        *://blog.csdn.net/*/category_*.html
 // @match        *://mp.weixin.qq.com/s*
 // @match        *://juejin.cn/post/*
+// @match        *://lmsys.org/blog/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
 // @grant        GM_addStyle
@@ -491,10 +492,10 @@
             if (authorElement) {
                 author = authorElement.textContent.trim();
             }
-            
+
             // Extract date from time element
             const date = document.querySelector('time.time')?.textContent.trim() || '';
-            
+
             const url = window.location.href;
 
             if (!content) {
@@ -510,6 +511,61 @@
 
         } catch (error) {
             console.error('Error downloading Juejin article:', error);
+            showProgress(`Error: ${error.message}`, 3000);
+        }
+    };
+
+    // Download LMSYS blog article function
+    const downloadLmsysArticle = async () => {
+        try {
+            showProgress('Processing LMSYS blog article...');
+
+            // Try multiple selectors for title
+            let title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+                        document.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
+                        document.querySelector('h1')?.textContent.trim() ||
+                        document.title.replace(' | LMSYS Org', '').trim() ||
+                        'Untitled';
+
+            // Try multiple selectors for content
+            let content = document.querySelector('article') ||
+                          document.querySelector('.blog-content') ||
+                          document.querySelector('.post-content') ||
+                          document.querySelector('.content') ||
+                          document.querySelector('main') ||
+                          document.body;
+
+            // Extract author and date from first paragraph (format: "by: Author, Jan 26, 2026")
+            let author = 'LMSYS Team';
+            let date = '';
+
+            const firstParagraph = content?.querySelector('p');
+            if (firstParagraph) {
+                const text = firstParagraph.textContent.trim();
+                const match = text.match(/^by:\s*(.+?)\s*,\s*([A-Za-z]+\s+\d+,\s*\d{4})/);
+                if (match) {
+                    author = match[1].trim();
+                    date = match[2].trim();
+                    // Remove this metadata paragraph
+                    firstParagraph.remove();
+                }
+            }
+
+            const url = window.location.href;
+
+            if (!content || content === document.body) {
+                throw new Error('Could not find content on this page');
+            }
+
+            // Process content
+            const markdown = processContent(title, content, author, date, url);
+
+            // Download the markdown
+            const filename = downloadMarkdownFile(title, author, markdown, date);
+            showProgress(`Downloaded: ${filename}`, 3000);
+
+        } catch (error) {
+            console.error('Error downloading LMSYS article:', error);
             showProgress(`Error: ${error.message}`, 3000);
         }
     };
@@ -644,6 +700,8 @@
             downloadWechatArticle();
         } else if (url.includes('juejin.cn/post/')) {
             downloadJuejinArticle();
+        } else if (url.includes('lmsys.org/blog/')) {
+            downloadLmsysArticle();
         } else {
             alert('This page type is not supported for download.');
         }
@@ -665,6 +723,8 @@
             return 'wechat';
         } else if (url.includes('juejin.cn/post/')) {
             return 'juejin';
+        } else if (url.includes('lmsys.org/blog/')) {
+            return 'lmsys';
         }
         return 'unknown';
     };
@@ -686,6 +746,8 @@
                 return generateWechatMarkdown();
             case 'juejin':
                 return generateJuejinMarkdown();
+            case 'lmsys':
+                return generateLmsysMarkdown();
             default:
                 throw new Error('Unsupported page type');
         }
@@ -785,6 +847,43 @@
 
         if (!content) {
             throw new Error('Could not find Juejin content');
+        }
+
+        const markdown = processContent(title, content, author, date, url);
+        return formatMarkdown(title, author, markdown, date, url);
+    };
+
+    const generateLmsysMarkdown = async () => {
+        const title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+                      document.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
+                      document.querySelector('h1')?.textContent.trim() ||
+                      document.title.replace(' | LMSYS Org', '').trim() ||
+                      'Untitled';
+        const content = document.querySelector('article') ||
+                       document.querySelector('.blog-content') ||
+                       document.querySelector('.post-content') ||
+                       document.querySelector('.content') ||
+                       document.querySelector('main');
+        const url = window.location.href;
+
+        // Extract author and date from first paragraph
+        let author = 'LMSYS Team';
+        let date = '';
+
+        if (content) {
+            const firstParagraph = content.querySelector('p');
+            if (firstParagraph) {
+                const text = firstParagraph.textContent.trim();
+                const match = text.match(/^by:\s*(.+?)\s*,\s*([A-Za-z]+\s+\d+,\s*\d{4})/);
+                if (match) {
+                    author = match[1].trim();
+                    date = match[2].trim();
+                }
+            }
+        }
+
+        if (!content) {
+            throw new Error('Could not find LMSYS content');
         }
 
         const markdown = processContent(title, content, author, date, url);
