@@ -185,6 +185,7 @@ docker run --rm -p 5000:5000 registry.cn-xxx.aliyuncs.com/xxx/zhihu2markdown:lat
 
 ## 6. 更新日志
 
+* 2025-02-05：新增 LMSYS 博客文章下载支持（lmsys.org）；油猴脚本支持 GitHub Gist 上传。
 * 2025-01-29：新增 GitHub Pages 纯静态部署方案，完全免费无需服务器。
 * 2025-03-10：添加 TamperMonkey 脚本，优化下载体验。
 * 2025-03-03：添加日志记录；专栏下载报错跳过；添加 Dockerfile。
