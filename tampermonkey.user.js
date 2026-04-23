@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Zhihu2Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Download Zhihu content (articles, answers, videos, columns) as Markdown
 // @author       Glenn
 // @match        *://zhuanlan.zhihu.com/p/*
@@ -121,6 +121,169 @@
         return match ? match[1] : '';
     };
 
+    const normalizeUrl = (url) => {
+        if (!url) return '';
+        if (url.startsWith('//')) {
+            return `https:${url}`;
+        }
+        return url;
+    };
+
+    const extractWechatDate = () => {
+        try {
+            const scripts = document.querySelectorAll('script[type="text/javascript"]');
+            for (const script of scripts) {
+                const text = script.textContent || '';
+                const timestampMatch = text.match(/var\s+ct\s*=\s*"(\d+)"/) || text.match(/var\s+ct\s*=\s*(\d+)/);
+                if (timestampMatch && timestampMatch[1]) {
+                    const timestamp = Number.parseInt(timestampMatch[1], 10) * 1000;
+                    const dateObj = new Date(timestamp);
+                    if (!Number.isNaN(dateObj.getTime())) {
+                        return dateObj.toISOString().split('T')[0];
+                    }
+                }
+
+                const dateMatch = text.match(/(\d{4}-\d{2}-\d{2})/);
+                if (dateMatch) {
+                    return dateMatch[1];
+                }
+            }
+        } catch (error) {
+            console.error('Error extracting WeChat date:', error);
+        }
+
+        const publishTime = document.querySelector('#publish_time')?.textContent.trim() || '';
+        const zhMatch = publishTime.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+        if (zhMatch) {
+            const [, year, month, day] = zhMatch;
+            return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+
+        const isoMatch = publishTime.match(/(\d{4}-\d{2}-\d{2})/);
+        return isoMatch ? isoMatch[1] : publishTime;
+    };
+
+    const extractWechatMetadata = () => {
+        const title = document.querySelector('h1#activity-name')?.textContent.trim() ||
+                      document.querySelector('h1.activity_title')?.textContent.trim() ||
+                      document.querySelector('h1.rich_media_title')?.textContent.trim() ||
+                      'Untitled';
+        const content = document.querySelector('div#js_content') ||
+                        document.querySelector('div.rich_media_content');
+        const author = document.querySelector('a#js_name')?.textContent.trim() ||
+                       document.querySelector('span.rich_media_meta.rich_media_meta_nickname')?.textContent.trim() ||
+                       document.querySelector('div#meta_content a')?.textContent.trim() ||
+                       'Unknown';
+        const date = extractWechatDate();
+        const url = window.location.href;
+
+        return { title, content, author, date, url };
+    };
+
+    const isLayoutTable = (table) => {
+        if (!table || table.querySelector('th')) {
+            return false;
+        }
+
+        if (!(table instanceof HTMLTableElement) || table.rows.length === 0) {
+            return true;
+        }
+
+        return Array.from(table.rows).every(row => row.cells.length <= 1);
+    };
+
+    const prepareWechatContent = (content) => {
+        if (!content) {
+            return content;
+        }
+
+        content.querySelectorAll('img').forEach((img, index) => {
+            const src = normalizeUrl(
+                img.getAttribute('data-src') ||
+                img.getAttribute('data-lazy-src') ||
+                img.getAttribute('data-original') ||
+                img.getAttribute('src')
+            );
+
+            if (src) {
+                img.setAttribute('src', src);
+            }
+
+            if (!img.getAttribute('alt')) {
+                img.setAttribute('alt', `wechat-image-${index + 1}`);
+            }
+        });
+
+        content.querySelectorAll('a').forEach(link => {
+            const href = normalizeUrl(link.getAttribute('href'));
+            if (href) {
+                link.setAttribute('href', href);
+            }
+        });
+
+        content.querySelectorAll('table').forEach(table => {
+            const text = table.textContent.replace(/\s+/g, ' ').trim();
+
+            if (!text && !table.querySelector('img')) {
+                table.remove();
+                return;
+            }
+
+            if (isLayoutTable(table) &&
+                text &&
+                text.length <= 60 &&
+                !table.querySelector('img, p, ul, ol, pre, blockquote, code')) {
+                const heading = document.createElement('h2');
+                heading.textContent = text;
+                table.replaceWith(heading);
+                return;
+            }
+
+            if (isLayoutTable(table)) {
+                table.setAttribute('data-layout-table', 'true');
+            }
+        });
+
+        return content;
+    };
+
+    const collectWechatImageAssets = (contentElement) => {
+        if (!contentElement) {
+            return [];
+        }
+
+        const seen = new Set();
+        const assets = [];
+
+        contentElement.querySelectorAll('img').forEach((img, index) => {
+            const sourceUrl = normalizeUrl(
+                img.getAttribute('data-src') ||
+                img.getAttribute('data-lazy-src') ||
+                img.getAttribute('data-original') ||
+                img.getAttribute('src')
+            );
+
+            if (!sourceUrl || seen.has(sourceUrl)) {
+                return;
+            }
+
+            seen.add(sourceUrl);
+
+            const width = Number.parseInt(img.getAttribute('data-w') || img.getAttribute('width') || '0', 10);
+            const ratio = Number.parseFloat(img.getAttribute('data-ratio') || '0');
+            const height = width > 0 && ratio > 0 ? Math.round(width * ratio) : 0;
+
+            assets.push({
+                sourceUrl,
+                alt: img.getAttribute('alt') || `wechat-image-${index + 1}`,
+                width: width || 0,
+                height,
+            });
+        });
+
+        return assets;
+    };
+
     // Create a Turndown service instance for HTML to Markdown conversion
     const createTurndownService = () => {
         const service = new TurndownService({
@@ -160,6 +323,11 @@
         service.addRule('tables', {
             filter: ['table'],
             replacement: function(content, node) {
+                if (node.getAttribute('data-layout-table') === 'true') {
+                    const trimmedContent = content.replace(/\n{3,}/g, '\n\n').trim();
+                    return trimmedContent ? `\n\n${trimmedContent}\n\n` : '\n\n';
+                }
+
                 // Create arrays to store each row of the table
                 const rows = Array.from(node.querySelectorAll('tr'));
                 if (rows.length === 0) return content;
@@ -195,13 +363,17 @@
     };
 
     // Process content for download
-    const processContent = (title, contentElement, author, date, url) => {
+    const processContent = (title, contentElement, author, date, url, options = {}) => {
         if (!contentElement) {
             throw new Error('Content element not found');
         }
 
         // Clone the node to prevent modifying the page
         const content = contentElement.cloneNode(true);
+
+        if (options.pageType === 'wechat') {
+            prepareWechatContent(content);
+        }
 
         // Remove style tags
         content.querySelectorAll('style').forEach(style => style.remove());
@@ -435,44 +607,14 @@
         try {
             showProgress('Processing WeChat article...');
 
-            const title = document.querySelector('h1#activity-name')?.textContent.trim() || 'Untitled';
-            const content = document.querySelector('div#js_content');
-            
-            // Updated author extraction - looking in meta_content div first for links
-            const authorElement = document.querySelector('div#meta_content');
-            let author = 'Unknown';
-            if (authorElement && authorElement.querySelectorAll('a').length > 0) {
-                author = authorElement.querySelectorAll('a')[0].textContent.trim();
-            }
-            
-            // Extract date from script tags (similar to Python version)
-            let date = '';
-            try {
-                const scripts = document.querySelectorAll('script[type="text/javascript"]');
-                for (const script of scripts) {
-                    if (script.textContent.includes('var ct =')) {
-                        const match = script.textContent.match(/var ct = "([^"]+)"/);
-                        if (match && match[1]) {
-                            // Convert Unix timestamp to YYYY-MM-DD format
-                            const timestamp = parseInt(match[1]) * 1000;
-                            const dateObj = new Date(timestamp);
-                            date = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD
-                            break;
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('Error extracting date:', err);
-            }
-            
-            const url = window.location.href;
+            const { title, content, author, date, url } = extractWechatMetadata();
 
             if (!content) {
                 throw new Error('Could not find content on this page');
             }
 
             // Process content
-            const markdown = processContent(title, content, author, date, url);
+            const markdown = processContent(title, content, author, date, url, { pageType: 'wechat' });
 
             // Download the markdown
             const filename = downloadMarkdownFile(title, author, markdown, date);
@@ -906,17 +1048,13 @@
     };
 
     const generateWechatMarkdown = async () => {
-        const title = document.querySelector('h1.activity_title')?.textContent.trim() || 'Untitled';
-        const content = document.querySelector('div.rich_media_content');
-        const author = document.querySelector('a#js_name')?.textContent.trim() || 'Unknown';
-        const date = document.querySelector('#publish_time')?.textContent.trim() || '';
-        const url = window.location.href;
+        const { title, content, author, date, url } = extractWechatMetadata();
 
         if (!content) {
             throw new Error('Could not find WeChat content');
         }
 
-        const markdown = processContent(title, content, author, date, url);
+        const markdown = processContent(title, content, author, date, url, { pageType: 'wechat' });
         return formatMarkdown(title, author, markdown, date, url);
     };
 
@@ -1087,6 +1225,7 @@
             let title = 'Untitled';
             let author = 'Unknown';
             let date = '';
+            let gistAssets = [];
 
             // Extract metadata based on page type
             if (pageType === 'article') {
@@ -1097,6 +1236,12 @@
                 title = document.querySelector('h1.QuestionHeader-title')?.textContent.trim() || 'Untitled';
                 author = document.querySelector('div.AuthorInfo-name')?.textContent.trim() || 'Unknown';
                 date = getArticleDate('span.ContentItem-time') || '';
+            } else if (pageType === 'wechat') {
+                const wechatMeta = extractWechatMetadata();
+                title = wechatMeta.title;
+                author = wechatMeta.author;
+                date = wechatMeta.date || '';
+                gistAssets = collectWechatImageAssets(wechatMeta.content);
             } else if (pageType === 'lmsys') {
                 title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
                         document.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
@@ -1132,7 +1277,7 @@
                 getValidFilename(`${title}_${author}.md`);
 
             // Upload to Gist
-            const gistUrl = await uploadToGist(markdown, filename);
+            const gistUrl = await uploadToGist(markdown, filename, gistAssets);
 
             // Copy Gist URL to clipboard
             await navigator.clipboard.writeText(gistUrl);
@@ -1166,8 +1311,139 @@
         GM_setValue('github_token', token);
     };
 
+    const detectImageMimeType = (sourceUrl, contentType = '') => {
+        if (contentType.startsWith('image/')) {
+            return contentType.split(';')[0].trim();
+        }
+
+        const wxFmtMatch = sourceUrl.match(/[?&]wx_fmt=([a-zA-Z0-9]+)/i);
+        if (wxFmtMatch && wxFmtMatch[1]) {
+            const format = wxFmtMatch[1].toLowerCase();
+            if (format === 'jpg') {
+                return 'image/jpeg';
+            }
+            return `image/${format}`;
+        }
+
+        try {
+            const pathname = new URL(sourceUrl).pathname.toLowerCase();
+            if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) {
+                return 'image/jpeg';
+            }
+            if (pathname.endsWith('.gif')) {
+                return 'image/gif';
+            }
+            if (pathname.endsWith('.webp')) {
+                return 'image/webp';
+            }
+            if (pathname.endsWith('.svg')) {
+                return 'image/svg+xml';
+            }
+        } catch (error) {
+            console.error('Error detecting image mime type:', error);
+        }
+
+        return 'image/png';
+    };
+
+    const escapeHtml = (value = '') => {
+        return value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
+
+    const arrayBufferToBase64 = (buffer) => {
+        const bytes = new Uint8Array(buffer);
+        const chunkSize = 0x8000;
+        let binary = '';
+
+        for (let index = 0; index < bytes.length; index += chunkSize) {
+            const chunk = bytes.subarray(index, index + chunkSize);
+            binary += String.fromCharCode.apply(null, chunk);
+        }
+
+        return btoa(binary);
+    };
+
+    const buildEmbeddedSvg = (base64, mimeType, asset) => {
+        const widthAttr = asset.width ? ` width="${asset.width}"` : '';
+        const heightAttr = asset.height ? ` height="${asset.height}"` : '';
+        const viewBoxAttr = asset.width && asset.height ? ` viewBox="0 0 ${asset.width} ${asset.height}"` : '';
+
+        return [
+            `<svg xmlns="http://www.w3.org/2000/svg"${viewBoxAttr}${widthAttr}${heightAttr} role="img" aria-label="${escapeHtml(asset.alt)}">`,
+            `  <image href="data:${mimeType};base64,${base64}" x="0" y="0" width="${asset.width || '100%'}" height="${asset.height || '100%'}" preserveAspectRatio="xMidYMid meet" />`,
+            '</svg>',
+        ].join('\n');
+    };
+
+    const fetchGistAssetFile = async (asset, fileName) => {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: asset.sourceUrl,
+                responseType: 'arraybuffer',
+                headers: {
+                    'Referer': window.location.href,
+                },
+                onload: (response) => {
+                    if (response.status < 200 || response.status >= 300) {
+                        reject(new Error(`Failed to fetch image: ${response.status}`));
+                        return;
+                    }
+
+                    try {
+                        const mimeType = detectImageMimeType(asset.sourceUrl, response.responseHeaders?.match(/content-type:\s*([^\r\n]+)/i)?.[1] || '');
+                        const base64 = arrayBufferToBase64(response.response);
+                        resolve({
+                            fileName,
+                            sourceUrl: asset.sourceUrl,
+                            content: buildEmbeddedSvg(base64, mimeType, asset),
+                        });
+                    } catch (error) {
+                        reject(error);
+                    }
+                },
+                onerror: () => {
+                    reject(new Error('Network error while fetching image'));
+                }
+            });
+        });
+    };
+
+    const requestGist = async (method, url, token, files, description) => {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method,
+                url,
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Content-Type': 'application/json',
+                },
+                data: JSON.stringify({
+                    description,
+                    files,
+                }),
+                onload: (response) => {
+                    if (response.status >= 200 && response.status < 300) {
+                        resolve(JSON.parse(response.responseText));
+                    } else {
+                        reject(new Error(`GitHub API Error: ${response.status} - ${response.responseText}`));
+                    }
+                },
+                onerror: () => {
+                    reject(new Error('Network error while uploading to Gist'));
+                }
+            });
+        });
+    };
+
     // Upload markdown to GitHub Gist (update if exists, create if not)
-    const uploadToGist = async (markdown, filename) => {
+    const uploadToGist = async (markdown, filename, assets = []) => {
         const token = getGitHubToken();
 
         if (!token) {
@@ -1217,36 +1493,51 @@
         const method = existingGistId ? 'PATCH' : 'POST';
         const url = existingGistId ? `${GITHUB_GIST_API}/${existingGistId}` : GITHUB_GIST_API;
 
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: method,
-                url: url,
-                headers: {
-                    'Authorization': `token ${token}`,
-                    'Accept': 'application/vnd.github.v3+json',
-                    'Content-Type': 'application/json',
-                },
-                data: JSON.stringify({
-                    description: filename,
-                    files: {
-                        [filename]: {
-                            content: markdown
-                        }
-                    }
-                }),
-                onload: (response) => {
-                    if (response.status >= 200 && response.status < 300) {
-                        const data = JSON.parse(response.responseText);
-                        resolve(data.html_url);
-                    } else {
-                        reject(new Error(`GitHub API Error: ${response.status} - ${response.responseText}`));
-                    }
-                },
-                onerror: (error) => {
-                    reject(new Error('Network error while uploading to Gist'));
+        const files = {
+            [filename]: {
+                content: markdown
+            }
+        };
+
+        const baseName = filename.replace(/\.md$/i, '');
+        const assetFileMap = [];
+
+        for (let index = 0; index < assets.length; index += 1) {
+            const asset = assets[index];
+            const assetFileName = getValidFilename(`${baseName}__img_${String(index + 1).padStart(2, '0')}.svg`);
+
+            try {
+                showProgress(`Embedding images for Gist (${index + 1}/${assets.length})...`);
+                const assetFile = await fetchGistAssetFile(asset, assetFileName);
+                files[assetFile.fileName] = { content: assetFile.content };
+                assetFileMap.push({
+                    fileName: assetFile.fileName,
+                    sourceUrl: assetFile.sourceUrl,
+                });
+            } catch (error) {
+                console.error(`Failed to embed image ${asset.sourceUrl}:`, error);
+            }
+        }
+
+        let data = await requestGist(method, url, token, files, filename);
+        let finalMarkdown = markdown;
+
+        for (const asset of assetFileMap) {
+            const rawUrl = data.files?.[asset.fileName]?.raw_url;
+            if (rawUrl) {
+                finalMarkdown = finalMarkdown.split(asset.sourceUrl).join(rawUrl);
+            }
+        }
+
+        if (finalMarkdown !== markdown) {
+            data = await requestGist('PATCH', `${GITHUB_GIST_API}/${data.id}`, token, {
+                [filename]: {
+                    content: finalMarkdown
                 }
-            });
-        });
+            }, filename);
+        }
+
+        return data.html_url;
     };
 
     // Show token input dialog
